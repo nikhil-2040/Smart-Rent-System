@@ -12,7 +12,11 @@ const Listings = () => {
   const [error, setError] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
   const [wishlistIds, setWishlistIds] = useState(new Set());
+  const [inputError, setInputError] = useState({});
+  const [inputErrorTxt , setErrorTxt] = useState("");
 
+  const PRICE_MIN = 100;
+  const PRICE_MAX = 10000;
   // App settings for language and currency
   const {
     language,
@@ -62,20 +66,6 @@ const Listings = () => {
 
   // Reference for the categories container for horizontal scrolling
   const categoriesContainerRef = useRef(null);
-  
-  useEffect(() => {
-  const queryParams = new URLSearchParams(location.search);
-  const typeParam = queryParams.get("type");
-
-  if (typeParam) {
-    setActiveCategory(typeParam.toLowerCase());
-  } else {
-    setActiveCategory("all");
-  }
-}, [location.search]);
-
-
-
 
   /**
    * Scrolls the categories container left or right
@@ -157,7 +147,6 @@ const Listings = () => {
   }, []);
 
   useEffect(() => {
-   
     // Reset all filters when the page loads to ensure all properties show
     setFilters({
       priceMin: "",
@@ -234,6 +223,56 @@ const Listings = () => {
   fetchProperties();
 }, [location.search]);
 
+  const checkInput = (e) => {
+    const { name, value } = e.target;
+    let hasError = false;
+    if (value === "") {
+      setFilters(prev => ({ ...prev, [name]: "" }));
+      setInputError(prev => ({ ...prev, [name]: false }));
+      return;
+    }
+
+    let input_value = Number(value);
+    if(Number.isNaN(input_value)){
+      setFilters({
+        ...filters ,
+        [name] : ''
+      });
+      hasError = true;
+      setErrorTxt('Please enter numbers only.');
+    }
+
+    else if (name === "priceMin") {
+      hasError =
+        ((input_value < PRICE_MIN || input_value > PRICE_MAX) && filters.priceMin !== "") || (input_value > Number(filters.priceMax) && filters.priceMax !== '');
+        
+
+    }
+
+    else if (name === "priceMax") {
+      hasError =
+        ((input_value > PRICE_MAX || input_value < PRICE_MIN) && filters.priceMax !== "") || (input_value < Number(filters.priceMin) && filters.priceMin !== '');
+        
+    }
+    setInputError((prev) => ({
+      ...prev,
+      [name]: hasError,
+    }));
+
+  
+
+    if (hasError) {
+     setErrorTxt(`Price must be between ${PRICE_MIN} and ${PRICE_MAX}.`);
+      setFilters({
+        ...filters ,
+        [name] : ''
+      });
+    setTimeout(() => {
+      setInputError(prev => ({ ...prev, [name]: false }));
+    }, 500);
+  }
+   
+  };
   /**
    * Handles changes to the filter inputs
    * @param {Event} e - The change event
@@ -355,7 +394,10 @@ const filteredProperties = properties.filter((property) => {
     let matches = true;
 
     // Experience filter
-    if (filters.experience && !matchesExperience(property, filters.experience)) {
+    if (
+      filters.experience &&
+      !matchesExperience(property, filters.experience)
+    ) {
       return false;
     }
 
@@ -498,37 +540,9 @@ const filteredProperties = properties.filter((property) => {
     }
   });
 
-  /**
-   * Debug logging for tracking filtered properties
-   */
-  useEffect(() => {
-    // Create a variable to track if API data is being used
-    const usingApiData = isApiData !== undefined ? isApiData : false;
-
-    if (activeCategory !== "all") {
-      // Check the first few properties and their categories
-      if (properties.length > 0) {
-       
-        properties.slice(0, 3).forEach((prop, i) => {
-        });
-      }
-
-      // Check which properties matched the category filter
-
-      sortedProperties.slice(0, 3).forEach((property, idx) => {
-      
-      });
-    }
-  }, [activeCategory, sortedProperties.length, properties.length, isApiData]);
-
- 
-
-  // Log filter state
-  // Debug filtered properties and their images
 
 
-  sortedProperties.slice(0, 3).forEach((property, idx) => {
-  });
+
 
   /**
    * Toggles a specific amenity filter
@@ -592,7 +606,7 @@ const filteredProperties = properties.filter((property) => {
       dryer: false,
       gym: false,
     });
-    
+    setActiveCategory("all");
     // Clear experience from URL
     const queryParams = new URLSearchParams(location.search);
     queryParams.delete("experience");
@@ -648,20 +662,23 @@ const filteredProperties = properties.filter((property) => {
    * @param {string} categoryId - The ID of the clicked category
    */
   const handleCategoryClick = (categoryId) => {
-  setActiveCategory(categoryId);
+    // Set the active category
+    setActiveCategory(categoryId);
 
-  const queryParams = new URLSearchParams(location.search);
+    // When 'all' is selected, clear all category-related filters
+    if (categoryId === "all") {
+      setFilters({
+        ...filters,
+        propertyType: "",
+      });
+    }
 
-  if (categoryId === "all") {
-    queryParams.delete("type");
-  } else {
-    queryParams.set("type", categoryId.toLowerCase());
-  }
-
-  navigate(`/listings?${queryParams.toString()}`);
-};
-
-
+    // If we're in a mobile view, scroll back to the top of results
+    window.scrollTo({
+      top: document.querySelector(".container")?.offsetTop || 0,
+      behavior: "smooth",
+    });
+  };
 
   /**
    * Navigates to property detail page
@@ -670,8 +687,6 @@ const filteredProperties = properties.filter((property) => {
    */
   const navigateToPropertyDetail = (propertyId, e) => {
     if (e) e.stopPropagation();
-
-  
 
     // Ensure propertyId is a string and is valid
     const stringId = String(propertyId).trim();
@@ -694,8 +709,6 @@ const filteredProperties = properties.filter((property) => {
 
         // Also store the property ID separately for redundancy
         sessionStorage.setItem("lastViewedPropertyId", stringId);
-
-      
       } catch (err) {
         console.error("Failed to store property in session storage:", err);
       }
@@ -761,7 +774,8 @@ const filteredProperties = properties.filter((property) => {
         </p>
         {filters.experience && (
           <p className="text-neutral-400 text-xs mt-2">
-            Filtering for {filters.experience === "city-tours"
+            Filtering for{" "}
+            {filters.experience === "city-tours"
               ? "City Tours"
               : filters.experience === "outdoor-adventures"
               ? "Outdoor Adventures"
@@ -793,50 +807,51 @@ const filteredProperties = properties.filter((property) => {
         style={{ zIndex: 10 }}
       >
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between">
-            <div className="relative w-full max-w-5xl mx-auto">
+          <div className="flex justify-around items-center">
+            <div className="relative max-w-4xl flex-grow overflow-hidden">
               {/* Left Arrow */}
               <button
                 onClick={() => scrollCategories("left")}
-                className="absolute left-0 top-1/2 -translate-y-1/2 bg-white border border-neutral-200 shadow-lg hover:shadow-xl hover:bg-neutral-100 transition-all duration-200 rounded-full w-10 h-10 flex items-center justify-center z-20 active:scale-95"
+                className="absolute top-1/2 -translate-y-1/2 bg-white border border-neutral-200 shadow-lg hover:shadow-xl hover:bg-neutral-100 transition-all duration-200 rounded-full w-10 h-10 flex items-center justify-center z-20 active:scale-95"
                 aria-label="Scroll left"
               >
-                <i className="fas fa-chevron-left text-xl text-primary-600"></i>
+                <i className="fas fa-chevron-left text-2xl text-primary-600"></i>
               </button>
 
               {/* Scrollable Categories */}
               <div
-                className="flex overflow-x-auto px-12 py-2 scrollbar-hide"
+                className="flex overflow-x-auto pb-2 pl-8 pr-8 scrollbar-hide"
                 ref={categoriesContainerRef}
               >
-                <div className="flex space-x-8 items-center h-full">
+                <div className="flex space-x-8">
                   {categories.map((category) => {
                     // Debug the category
                     if (activeCategory === category.id) {
-                     
                     }
 
                     return (
                       <div
                         key={category.id}
                         onClick={() => handleCategoryClick(category.id)}
-                        className={`flex flex-col items-center cursor-pointer transition-all duration-300 min-w-max h-full py-1 ${
+                        className={`flex flex-col items-center cursor-pointer transition-all duration-300 min-w-max ${
                           activeCategory === category.id
-                            ? "text-primary-600 border-b-2 border-primary-600 scale-105"
-                            : "text-neutral-500 hover:text-primary-500 hover:scale-100"
+                            ? "text-primary-600 border-b-2 border-primary-600 scale-110"
+                            : "text-neutral-500 hover:text-primary-500 hover:scale-105"
                         }`}
                       >
                         <div
-                          className={`rounded-full p-2 mb-1 ${activeCategory === category.id
+                          className={`rounded-full p-2 mb-1 ${
+                            activeCategory === category.id
                               ? "bg-primary-50"
                               : "bg-neutral-50"
-                            }`}
+                          }`}
                         >
                           <i
-                            className={`${category.icon} text-lg ${activeCategory === category.id
+                            className={`${category.icon} text-lg ${
+                              activeCategory === category.id
                                 ? "text-primary-600"
                                 : "text-neutral-500"
-                              }`}
+                            }`}
                           ></i>
                         </div>
                         <span className="text-sm font-medium">
@@ -857,7 +872,7 @@ const filteredProperties = properties.filter((property) => {
                 className="absolute right-0 top-1/2 -translate-y-1/2 bg-white border border-neutral-200 shadow-lg hover:shadow-xl hover:bg-neutral-100 transition-all duration-200 rounded-full w-10 h-10 flex items-center justify-center z-20 active:scale-95"
                 aria-label="Scroll right"
               >
-                <i className="fas fa-chevron-right text-xl text-primary-600"></i>
+                <i className="fas fa-chevron-right text-2xl text-primary-600"></i>
               </button>
             </div>
 
@@ -905,46 +920,65 @@ const filteredProperties = properties.filter((property) => {
                   {/* Price Range filter */}
                   <div>
                     <h3 className="text-lg font-medium text-neutral-800 mb-3">
-                      Price Range1111
+                      Price Range
+                      <span className="text-sm ps-1 text-neutral-500">
+                        (100 - 10,000)
+                      </span>
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-neutral-700 mb-1">
-                          Min Price1111
+                          Min Price
                         </label>
                         <div className="relative rounded-md">
                           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <span className="text-neutral-500">$</span>
                           </div>
                           <input
-                            type="number"
+                            type="text"
                             name="priceMin"
                             value={filters.priceMin}
+                            onBlur={checkInput}
                             onChange={handleFilterChange}
-                            className="pl-7 w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            className={`pl-7 w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
+                              ${ inputError.priceMin ? "range-input-error" : ""}`}
                             placeholder="Min"
                           />
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-neutral-700 mb-1">
-                          Max Price1111
+                          Max Price
                         </label>
                         <div className="relative rounded-md">
                           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <span className="text-neutral-500">$</span>
                           </div>
                           <input
-                            type="number"
+                            type="text"
                             name="priceMax"
                             value={filters.priceMax}
+                            onBlur={checkInput}
                             onChange={handleFilterChange}
-                            className="pl-7 w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            className={`pl-7 w-full px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 
+                              ${ inputError.priceMax ? "range-input-error" : ""}`}
                             placeholder="Max"
                           />
                         </div>
                       </div>
                     </div>
+                    {inputErrorTxt && (
+                        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-6 mt-3 text-sm animate-shake relative">
+                          <p className="font-medium">⚠️ {inputErrorTxt}</p>
+                          <button
+                            type="button"
+                            className="absolute top-3 right-3 text-red-500 hover:text-red-700"
+                            onClick={() => setErrorTxt("")}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                     )}
                   </div>
 
                   {/* Bedrooms filter */}
@@ -999,10 +1033,11 @@ const filteredProperties = properties.filter((property) => {
                               language: lang.code,
                             });
                           }}
-                          className={`flex items-center px-3 py-2 text-sm rounded-lg transition-all duration-200 ${language === lang.code
+                          className={`flex items-center px-3 py-2 text-sm rounded-lg transition-all duration-200 ${
+                            language === lang.code
                               ? "bg-primary-50 text-primary-600 font-medium border border-primary-200"
                               : "text-neutral-700 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300"
-                            }`}
+                          }`}
                         >
                           <span>{lang.name}</span>
                         </button>
@@ -1241,20 +1276,15 @@ const filteredProperties = properties.filter((property) => {
                           dryer: false,
                           gym: false,
                         });
-                        const queryParams = new URLSearchParams(location.search);
-                        const typeParam = queryParams.get("type");
-                        setActiveCategory(
-                          typeParam
-                          ? typeParam.charAt(0).toUpperCase() + typeParam.slice(1)
-                          : "all"
-                        );
-
+                        setActiveCategory("all");
                         // Clear experience from URL
-                       
+                        const queryParams = new URLSearchParams(
+                          location.search
+                        );
                         queryParams.delete("experience");
-                        queryParams.delete("type");
-                        navigate(`/listings`, { replace: true });
-
+                        navigate(`/listings?${queryParams.toString()}`, {
+                          replace: true,
+                        });
                       }}
                       className="flex-1 px-4 py-2 border border-neutral-300 rounded-md hover:bg-neutral-100 text-neutral-600 transition-colors duration-200"
                     >
@@ -1365,8 +1395,8 @@ const filteredProperties = properties.filter((property) => {
               const propertyImages = hasValidImages
                 ? property.images
                 : hasValidImage
-                  ? [property.image]
-                  : [getCategoryImage()];
+                ? [property.image]
+                : [getCategoryImage()];
 
               return (
                 // Property card component
@@ -1420,11 +1450,13 @@ const filteredProperties = properties.filter((property) => {
                         onClick={(e) => toggleWishlist(e, property._id)}
                       >
                         <i
-                          className={`${wishlistIds.has(property._id) ? "fas text-red-500" : "far"
-                            } fa-heart`}
+                          className={`${
+                            wishlistIds.has(property._id)
+                              ? "fas text-red-500"
+                              : "far"
+                          } fa-heart`}
                         ></i>
                       </button>
-
                     </div>
 
                     {/* Property details section */}
